@@ -1,0 +1,79 @@
+name: Deployment
+on:
+  push:
+    branches:
+      - master
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get code
+        uses: actions/checkout@v3
+      - name: Load and Cache dependencies
+        id: cache-deps
+        # Vì đây là action ở local nên sẽ hướng đường dẫn tới đó
+        uses: ./.github/actions/cached-deps
+        with:
+          caching: 'false'
+      - name: Output information
+        run: echo "Cache used? ${{steps.cache-deps.outputs.used-cache}}"
+      - name: Lint code
+        run: npm run lint
+        
+  qualityCheck:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Get code
+        uses: actions/checkout@v3
+      - name: Load and Cache dependencies
+        # Vì đây là action ở local nên sẽ hướng đường dẫn tới đó
+        uses: ./.github/actions/cached-deps
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@master
+        env:
+            SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+              -Dsonar.organization=cuong199344
+              -Dsonar.projectKey=cuong199344
+              -Dsonar.python.coverage.reportPaths=coverage.xml
+
+
+  build:
+    # needs: test
+    needs: qualityCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get code
+        uses: actions/checkout@v3
+      - name: Load and Cache dependencies
+        # Vì đây là action ở local nên sẽ hướng đường dẫn tới đó
+        uses: ./.github/actions/cached-deps
+      - name: Build website
+        run: npm run build
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist-files
+          path: dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testing
+    steps:
+      - name: Get code
+        uses: actions/checkout@v3
+      - name: Get build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          # chon artifacts muốn download
+          name: dist-files
+          # chọn nơi sẽ tải xuống
+          path: ./dist
+      - name: Output contents
+        run: ls
+      - name: Deploy site
+        id: deploy
+        run: |
+          echo "Deploy code hear"
